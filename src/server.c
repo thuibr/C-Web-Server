@@ -52,12 +52,27 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 {
     const int max_response_size = 262144;
     char response[max_response_size];
+    size_t response_length = 0;
+    time_t t = time(NULL);
+    struct tm *tm = localtime(&t);
+    char s[64];
+    strftime(s, sizeof(s), "%c", tm);
 
     // Build HTTP response and store it in response
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    memset(response, 0, sizeof(response));
+    strcat(response, header);
+    sprintf(response + strlen((char *)&response), "\r\n");
+    sprintf(response + strlen((char *)&response), "Date: %s\r\n", s);
+    sprintf(response + strlen((char *)&response), "Connection: close\r\n");
+    sprintf(response + strlen((char *)&response), "Content-Length: %d\r\n", content_length);
+    sprintf(response + strlen((char *)&response), "Content-Type: %s\r\n", content_type);
+    sprintf(response + strlen((char *)&response), "\r\n");
+    if (content_length > 0) {
+    	strcat(response, (char *)body);
+    	sprintf(response + strlen((char *)&response), "\r\n\r\n");
+    }
+    response_length = strlen((char *)&response);
+    printf("server: sending\n---\n%s\n---\n", response);
 
     // Send it all!
     int rv = send(fd, response, response_length, 0);
@@ -76,16 +91,13 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 void get_d20(int fd)
 {
     // Generate a random number between 1 and 20 inclusive
-    
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    char num[2];
+    int r = rand() % 21;
+    printf("rand: %d\n", r);
+    sprintf(num, "%d", r);
 
     // Use send_response() to send it back as text/plain data
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    send_response(fd, "HTTP/1.1 200 OK", "text/plain", &num, strlen(num));
 }
 
 /**
@@ -119,9 +131,24 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    char filepath[4096];
+    struct file_data *filedata; 
+    char *mime_type;
+
+    // Fetch the file file
+    snprintf(filepath, sizeof filepath, "%s%s", SERVER_FILES, request_path);
+    filedata = file_load(filepath);
+
+    if (filedata == NULL) {
+	resp_404(fd);
+	return;
+    }
+
+    mime_type = mime_type_get(filepath);
+
+    send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size);
+
+    file_free(filedata);
 }
 
 /**
@@ -144,6 +171,9 @@ void handle_http_request(int fd, struct cache *cache)
 {
     const int request_buffer_size = 65536; // 64K
     char request[request_buffer_size];
+    char *path, *verb;
+    const char GET[] = "GET", POST[] = "POST";
+    const char D20[] = "/d20";
 
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
@@ -154,19 +184,35 @@ void handle_http_request(int fd, struct cache *cache)
     }
 
 
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
 
     // Read the first two components of the first line of the request 
+    verb = strtok(request, " ");
+    printf("server: got token %s\n", verb);
+    path = strtok(NULL, " ");
+    printf("server: got token %s\n", path);
  
     // If GET, handle the get endpoints
+    if (strcmp(verb,GET) == 0) {
+	printf("server: it's a GET\n");
 
-    //    Check if it's /d20 and handle that special case
-    //    Otherwise serve the requested file by calling get_file()
+    	// Check if it's /d20 and handle that special case
+	if (strcmp(path, D20) == 0) {
+		get_d20(fd);
+	}
 
+    	// Otherwise serve the requested file by calling get_file()
+	else {
+		get_file(fd, cache, path);
+	}
+    }
 
     // (Stretch) If POST, handle the post request
+    else if (strcmp(verb,POST) == 0) {
+	printf("server: Got POST\n");
+    	///////////////////
+    	// IMPLEMENT ME! //
+    	///////////////////
+    }
 }
 
 /**
@@ -179,6 +225,9 @@ int main(void)
     char s[INET6_ADDRSTRLEN];
 
     struct cache *cache = cache_create(10, 0);
+
+    // Seed the random number generator
+    srand(time(NULL));
 
     // Get a listening socket
     int listenfd = get_listener_socket(PORT);
