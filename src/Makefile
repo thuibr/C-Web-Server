@@ -33,7 +33,7 @@ TEST_SRC=$(wildcard cache_tests/*_tests.c)
 TESTS=$(patsubst %.c,%,$(TEST_SRC))
 
 cache_tests/cache_tests:
-	cc cache_tests/cache_tests.c cache.c hashtable.c llist.c -o cache_tests/cache_tests
+	cc -g cache_tests/cache_tests.c cache.c hashtable.c llist.c -o cache_tests/cache_tests
 
 test:
 	tests
