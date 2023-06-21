@@ -133,10 +133,25 @@ void get_file(int fd, struct cache *cache, char *request_path)
 {
     char filepath[4096];
     struct file_data *filedata; 
+    struct cache_entry *cacheentry;
     char *mime_type;
 
     // Fetch the file file
     snprintf(filepath, sizeof filepath, "%s%s", SERVER_FILES, request_path);
+
+    cacheentry = cache_get(cache, filepath);
+    if (cacheentry) {
+    	printf("server: serving %s from cache\n", filepath);
+    	send_response(
+		fd,
+		"HTTP/1.1 200 OK",
+		cacheentry->content_type,
+		cacheentry->content,
+		cacheentry->content_length
+        );
+	return;
+    }
+
     filedata = file_load(filepath);
 
     if (filedata == NULL) {
@@ -147,6 +162,9 @@ void get_file(int fd, struct cache *cache, char *request_path)
     mime_type = mime_type_get(filepath);
 
     send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size);
+
+    printf("server: caching %s\n", filepath);
+    cache_put(cache, filepath, mime_type, filedata->data, filedata->size);
 
     file_free(filedata);
 }
